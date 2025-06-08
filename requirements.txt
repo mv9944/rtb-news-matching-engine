@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+python-socketio
+python-dotenv
+faker
+google-generativeai
