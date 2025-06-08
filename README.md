@@ -157,21 +157,4 @@ Add your GOOGLE_API_KEY as a secret environment variable.
 
 The platform will build the image and deploy the application, providing you with a public URL.
 
-Project Structure
-rtb-news-matching-engine/
-├── .env                # Local environment variables (ignored by Git)
-├── .gitignore          # Specifies files for Git to ignore
-├── Dockerfile          # Instructions for building the production container
-├── README.md           # This file
-├── app.py              # The core FastAPI application logic
-├── requirements.txt    # Python dependencies
-└── static/
-    └── index.html      # The frontend dashboard
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-IGNORE_WHEN_COPYING_END
-License
-
 This project is licensed under the MIT License. See the LICENSE file for details.
