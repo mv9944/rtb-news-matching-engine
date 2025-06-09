@@ -31,7 +31,6 @@ recent_users = deque(maxlen=20)
 recent_matches = deque(maxlen=20)
 user_interests_db = {}
 
-# --- NEW: State variable to track if generators are running ---
 STREAMS_RUNNING = False
 
 # --- Gemini LLM Configuration ---
@@ -68,7 +67,6 @@ Title: {title}
 Summary: {summary}
 """
 
-# --- FastAPI & Socket.IO Setup (MODIFIED) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan manager now starts the app in an idle state."""
@@ -82,7 +80,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app_asgi = socketio.ASGIApp(sio, app)
 
 
-# --- LLM Integration (Unchanged from your version) ---
 async def get_gemini_tags(title: str, summary: str) -> list[str]:
     """
     Calls the Gemini API to extract semantic tags from article text.
@@ -96,7 +93,7 @@ async def get_gemini_tags(title: str, summary: str) -> list[str]:
 
     try:
         model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash", # Respecting your model choice
+            model_name="gemini-2.0-flash",
             generation_config=generation_config,
             safety_settings=safety_settings
         )
@@ -172,7 +169,7 @@ async def user_stream_generator():
         await asyncio.sleep(1 / 15)
 
 
-# --- Matching Engine (Unchanged) ---
+# --- Matching Engine  ---
 async def match_article_to_users(article: dict):
     """Calculates match scores between a new article and all known users."""
     article_tags = set(article.get("llm_tags", []))
@@ -201,7 +198,7 @@ async def match_article_to_users(article: dict):
                 await sio.emit('new_match', match)
 
 
-# --- API Endpoints & WebSocket Events (MODIFIED) ---
+# --- API Endpoints & WebSocket Events  ---
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     """Serves the main dashboard HTML file."""
@@ -226,7 +223,6 @@ def disconnect(sid):
     """Handles a client disconnecting."""
     print(f"Client disconnected: {sid}")
 
-# --- NEW: Event handler for the start button ---
 @sio.event
 async def start_streams(sid):
     """Starts the data generators if they are not already running. Triggered by a client."""
@@ -234,10 +230,8 @@ async def start_streams(sid):
     if not STREAMS_RUNNING:
         print(f"--- Received start signal from client {sid}. Starting data streams... ---")
         STREAMS_RUNNING = True
-        # Start the tasks to run concurrently in the background
         asyncio.create_task(article_stream_generator())
         asyncio.create_task(user_stream_generator())
-        # Notify all connected clients that the streams have started
         await sio.emit('streams_started')
     else:
         print(f"--- Received start signal from {sid}, but streams are already running. ---")
