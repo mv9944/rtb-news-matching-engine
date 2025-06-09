@@ -6,8 +6,17 @@
     <title>RTB News Matching Engine</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #121212; color: #e0e0e0; margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 15px; }
+        h1 { margin: 0; }
+        .controls { display: flex; align-items: center; gap: 20px; }
+        #status { font-size: 1.1em; font-weight: bold; }
+        #status.idle { color: #ffc107; }
+        #status.active { color: #28a745; }
+        #startButton { background-color: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; font-size: 1em; cursor: pointer; transition: background-color 0.2s; }
+        #startButton:hover { background-color: #0056b3; }
+        #startButton:disabled { background-color: #555; cursor: not-allowed; }
         .container { display: flex; gap: 20px; }
-        .column { flex: 1; background-color: #1e1e1e; border-radius: 8px; padding: 15px; overflow-y: hidden; height: 85vh; }
+        .column { flex: 1; background-color: #1e1e1e; border-radius: 8px; padding: 15px; overflow-y: hidden; height: 80vh; }
         h2 { margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 10px; }
         ul { list-style-type: none; padding: 0; margin: 0; overflow-y: auto; height: calc(100% - 50px); }
         li { background-color: #2a2a2a; margin-bottom: 10px; padding: 10px; border-radius: 4px; font-size: 0.9em; animation: fadeIn 0.5s ease-in-out; }
@@ -17,7 +26,13 @@
     </style>
 </head>
 <body>
-    <h1>RTB News Matching Engine Dashboard</h1>
+    <div class="header">
+        <h1>RTB News Matching Engine Dashboard</h1>
+        <div class="controls">
+            <p id="status" class="idle">Status: Idle</p>
+            <button id="startButton">Start Streams</button>
+        </div>
+    </div>
     <div class="container">
         <div class="column">
             <h2>Live Article Feed (~100 QPS)</h2>
@@ -38,6 +53,26 @@
         const socket = io();
         const MAX_ITEMS = 20;
 
+        const startButton = document.getElementById('startButton');
+        const statusText = document.getElementById('status');
+
+        function setStreamsActive() {
+            statusText.textContent = 'Status: Active';
+            statusText.className = 'active';
+            startButton.textContent = 'Streams Running';
+            startButton.disabled = true;
+        }
+
+        startButton.addEventListener('click', () => {
+            console.log('Sending start_streams signal to server...');
+            socket.emit('start_streams');
+        });
+
+        socket.on('streams_started', () => {
+            console.log('Server confirmed streams have started.');
+            setStreamsActive();
+        });
+
         function addToList(listId, itemHtml) {
             const list = document.getElementById(listId);
             const li = document.createElement('li');
@@ -48,46 +83,28 @@
             }
         }
 
-        socket.on('connect', () => {
-            console.log('Connected to server!');
-        });
-
+        socket.on('connect', () => { console.log('Connected to server!'); });
         socket.on('initial_state', (data) => {
             console.log('Received initial state');
             data.articles.forEach(article => addToList('articles', createArticleHtml(article)));
             data.users.forEach(user => addToList('users', createUserHtml(user)));
             data.matches.forEach(match => addToList('matches', createMatchHtml(match)));
         });
-
-        socket.on('new_article', (article) => {
-            addToList('articles', createArticleHtml(article));
-        });
-
-        socket.on('new_user', (user) => {
-            addToList('users', createUserHtml(user));
-        });
-
-        socket.on('new_match', (match) => {
-            addToList('matches', createMatchHtml(match));
-        });
+        socket.on('new_article', (article) => { addToList('articles', createArticleHtml(article)); });
+        socket.on('new_user', (user) => { addToList('users', createUserHtml(user)); });
+        socket.on('new_match', (match) => { addToList('matches', createMatchHtml(match)); });
 
         function createArticleHtml(article) {
             const tagsHtml = article.llm_tags.map(tag => `<span class="tag">${tag}</span>`).join(' ');
             return `<strong>${article.title}</strong><br><small>${tagsHtml}</small>`;
         }
-
         function createUserHtml(user) {
             const interestsHtml = user.interests.map(tag => `<span class="tag" style="background-color: #17a2b8;">${tag}</span>`).join(' ');
-            return `<strong>${user.user_id} (${user.persona})</strong><br><small>${interestsHtml}</small>`;
+            return `<strong>${user.user_id}</strong><br><small>${interestsHtml}</small>`;
         }
-
         function createMatchHtml(match) {
             const matchedTagsHtml = match.matched_tags.map(tag => `<span class="tag" style="background-color: #dc3545;">${tag}</span>`).join(' ');
-            return `
-                <span class="score">[${match.score}]</span> User <strong>${match.user_id}</strong> matched article:<br>
-                <em>${match.article_title}</em><br>
-                <small>${matchedTagsHtml}</small>
-            `;
+            return `<span class="score">[${match.score}]</span> User <strong>${match.user_id}</strong> matched article:<br><em>${match.article_title}</em><br><small>${matchedTagsHtml}</small>`;
         }
     </script>
 </body>

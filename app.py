@@ -25,11 +25,14 @@ MASTER_TOPICS = [
     "cryptocurrency-trends", "electric-vehicles", "battery-technology"
 ]
 
-# In-memory storage (as per spec, for demo purposes)
+# In-memory storage
 recent_articles = deque(maxlen=20)
 recent_users = deque(maxlen=20)
 recent_matches = deque(maxlen=20)
 user_interests_db = {}
+
+# --- NEW: State variable to track if generators are running ---
+STREAMS_RUNNING = False
 
 # --- Gemini LLM Configuration ---
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -65,12 +68,11 @@ Title: {title}
 Summary: {summary}
 """
 
-# --- FastAPI & Socket.IO Setup ---
+# --- FastAPI & Socket.IO Setup (MODIFIED) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Starting background tasks for data generation...")
-    asyncio.create_task(article_stream_generator())
-    asyncio.create_task(user_stream_generator())
+    """Lifespan manager now starts the app in an idle state."""
+    print("Application started. Waiting for a client to connect and start the streams...")
     yield
     print("Application shutting down...")
 
@@ -80,7 +82,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app_asgi = socketio.ASGIApp(sio, app)
 
 
-# --- LLM Integration (with Full Input/Output Logging) ---
+# --- LLM Integration (Unchanged from your version) ---
 async def get_gemini_tags(title: str, summary: str) -> list[str]:
     """
     Calls the Gemini API to extract semantic tags from article text.
@@ -94,7 +96,7 @@ async def get_gemini_tags(title: str, summary: str) -> list[str]:
 
     try:
         model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash-preview-05-20",
+            model_name="gemini-2.0-flash", # Respecting your model choice
             generation_config=generation_config,
             safety_settings=safety_settings
         )
@@ -128,6 +130,7 @@ async def fallback_tag_extraction(title: str) -> list[str]:
     return [word.lower() for word in title.split() if len(word) > 4]
 
 
+# --- Data Stream Generators (Unchanged) ---
 async def article_stream_generator():
     """Generates articles based on a topic from the MASTER_TOPICS list."""
     while True:
@@ -169,7 +172,7 @@ async def user_stream_generator():
         await asyncio.sleep(1 / 15)
 
 
-# --- Matching Engine ---
+# --- Matching Engine (Unchanged) ---
 async def match_article_to_users(article: dict):
     """Calculates match scores between a new article and all known users."""
     article_tags = set(article.get("llm_tags", []))
@@ -198,7 +201,7 @@ async def match_article_to_users(article: dict):
                 await sio.emit('new_match', match)
 
 
-# --- API Endpoints & WebSocket Events ---
+# --- API Endpoints & WebSocket Events (MODIFIED) ---
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     """Serves the main dashboard HTML file."""
@@ -209,6 +212,9 @@ async def read_root(request: Request):
 async def connect(sid, environ):
     """Handles a new client connecting via WebSocket."""
     print(f"Client connected: {sid}")
+    # Inform the new client if the streams are already running
+    if STREAMS_RUNNING:
+        await sio.emit('streams_started', to=sid)
     await sio.emit('initial_state', {
         "articles": list(recent_articles),
         "users": list(recent_users),
@@ -219,3 +225,19 @@ async def connect(sid, environ):
 def disconnect(sid):
     """Handles a client disconnecting."""
     print(f"Client disconnected: {sid}")
+
+# --- NEW: Event handler for the start button ---
+@sio.event
+async def start_streams(sid):
+    """Starts the data generators if they are not already running. Triggered by a client."""
+    global STREAMS_RUNNING
+    if not STREAMS_RUNNING:
+        print(f"--- Received start signal from client {sid}. Starting data streams... ---")
+        STREAMS_RUNNING = True
+        # Start the tasks to run concurrently in the background
+        asyncio.create_task(article_stream_generator())
+        asyncio.create_task(user_stream_generator())
+        # Notify all connected clients that the streams have started
+        await sio.emit('streams_started')
+    else:
+        print(f"--- Received start signal from {sid}, but streams are already running. ---")

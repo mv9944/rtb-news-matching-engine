@@ -4,3 +4,4 @@ python-socketio
 python-dotenv
 faker
 google-generativeai
+pydantic
